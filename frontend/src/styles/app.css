@@ -1,0 +1,24 @@
+:root{--bg:#0f1419;--panel:#171e26;--line:#263241;--text:#dbe4ee;--mute:#8497ab;--acc:#4cc2b0}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,sans-serif}
+.app{display:flex;min-height:100vh}.side{width:200px;padding:20px;border-right:1px solid var(--line)}
+.side button{display:block;width:100%;text-align:left;background:none;border:0;color:var(--mute);padding:8px;border-radius:6px;cursor:pointer}
+.side button.on{background:var(--panel);color:var(--text)}.main{flex:1;padding:28px;max-width:1000px}
+input{background:var(--panel);border:1px solid var(--line);color:var(--text);padding:10px;border-radius:6px;width:min(480px,100%)}
+.go{background:var(--acc);color:#04201b;border:0;padding:10px 16px;border-radius:6px;font-weight:600;cursor:pointer;margin-left:8px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;margin:10px 0}
+.err{color:#ff8a80}.msg{white-space:pre-wrap}.flow{height:520px;border:1px solid var(--line);border-radius:8px}
+code{color:var(--acc)}@media(max-width:700px){.app{flex-direction:column}.side{width:auto}}
+.ghost{background:var(--panel);color:var(--mute);border:1px solid var(--line)}
+.skel{height:90px;border-radius:6px;margin-top:8px;background:linear-gradient(90deg,var(--line),#1d2733,var(--line));background-size:200% 100%;animation:sk 1.2s infinite}
+@keyframes sk{to{background-position:-200% 0}}@media(prefers-reduced-motion:reduce){.skel{animation:none}}
+.hdr{color:var(--mute);margin:12px 0}
+.side a{display:flex;gap:8px;align-items:center;color:var(--mute);padding:8px;border-radius:6px;text-decoration:none}
+.side a.on{background:var(--panel);color:var(--text)}.side .hdr{margin-top:24px;font-size:13px;word-break:break-all}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+.stat b{display:block;font-size:24px}.stat small{color:var(--mute)}
+.chip{display:inline-block;background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:14px;padding:3px 10px;margin:3px;font-size:13px;cursor:pointer}
+.chip.on{border-color:var(--acc)}select{background:var(--panel);color:var(--text);border:1px solid var(--line);padding:8px;border-radius:6px}
+.md pre{overflow:auto;background:#0b0f14;padding:8px;border-radius:6px}
+.ghost{background:var(--panel);color:var(--mute);border:1px solid var(--line)}
+.skel{height:90px;border-radius:6px;margin-top:8px;background:linear-gradient(90deg,var(--line),#1d2733,var(--line));background-size:200% 100%;animation:sk 1.2s infinite}
+@keyframes sk{to{background-position:-200% 0}}.hdr{color:var(--mute);margin:12px 0}
