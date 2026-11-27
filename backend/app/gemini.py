@@ -6,6 +6,7 @@ from email.utils import parsedate_to_datetime
 
 MAX_RETRIES = 2
 INITIAL_BACKOFF_SECONDS = 1
+MAX_RETRY_DELAY_SECONDS = 30
 
 
 def _status_code(error):
@@ -67,12 +68,18 @@ def _retry_delay(error):
     return None
 
 
+def is_rate_limited(error):
+    return _status_code(error) == 429
+
+
 def call_with_transient_error_retry(request, *args, **kwargs):
     for attempt in range(MAX_RETRIES + 1):
         try:
             return request(*args, **kwargs)
         except Exception as error:
-            if _status_code(error) not in (429, 503) or attempt == MAX_RETRIES:
+            retry_delay = _retry_delay(error)
+            if (_status_code(error) not in (429, 503) or attempt == MAX_RETRIES
+                    or (retry_delay is not None and retry_delay > MAX_RETRY_DELAY_SECONDS)):
                 raise
             backoff = INITIAL_BACKOFF_SECONDS * (2 ** attempt)
-            time.sleep(max(backoff, _retry_delay(error) or 0.0))
+            time.sleep(max(backoff, retry_delay or 0.0))

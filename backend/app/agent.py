@@ -2,9 +2,9 @@
 import os
 from google import genai
 from google.genai import types
-from .gemini import call_with_transient_error_retry
+from .gemini import call_with_transient_error_retry, is_rate_limited
 
-MAX_STEPS = 3
+MAX_STEPS = 6
 
 
 class Tools:
@@ -81,12 +81,10 @@ SYSTEM = ("You answer questions about a code repository using ONLY tool results.
 
 
 def run_agent(analysis, root, question, mode="beginner"):
-    tools = Tools(analysis, root)
     key = os.getenv("GEMINI_API_KEY")
-    if not key:                                             # limited mode: plain keyword search
-        words = [w for w in question.split() if len(w) > 3][:3]
-        hits = [h for w in words for h in tools.search_code(w)][:10]
-        return {"answer": "Limited mode (no Gemini key). Keyword matches:", "sources": hits, "steps": []}
+    if not key:
+        return keyword_search_response(analysis, root, question)
+    tools = Tools(analysis, root)
     client = genai.Client(api_key=key)
     contents = [types.Content(role="user", parts=[types.Part(text=f"[{mode} mode] {question}")])]
     cfg = types.GenerateContentConfig(system_instruction=SYSTEM, tools=[types.Tool(function_declarations=DECLS)],
@@ -118,4 +116,14 @@ def run_agent(analysis, root, question, mode="beginner"):
             contents.append(types.Content(role="user", parts=replies))
         return {"answer": "Stopped: tool-call limit reached.", "sources": [], "steps": steps}
     except Exception as e:
+        if is_rate_limited(e):
+            return keyword_search_response(
+                analysis, root, question, "Gemini quota exhausted; using local keyword search.")
         return {"answer": f"AI request failed ({e}). Try again shortly.", "sources": [], "steps": steps}
+
+
+def keyword_search_response(analysis, root, question, message="Limited mode (no Gemini key)."):
+    tools = Tools(analysis, root)
+    words = [w for w in question.split() if len(w) > 3][:3]
+    hits = [h for w in words for h in tools.search_code(w)][:10]
+    return {"answer": f"{message} Keyword matches:", "sources": hits, "steps": []}

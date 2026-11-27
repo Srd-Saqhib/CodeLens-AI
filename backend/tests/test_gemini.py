@@ -73,6 +73,17 @@ def test_service_unavailable_retries_with_exponential_backoff(monkeypatch):
     assert delays == [1, 2]
 
 
+def test_long_quota_retry_delay_is_not_waited_out(monkeypatch):
+    def request():
+        raise APIError(429, {"error": {"details": [
+            {"retryDelay": "58182s"}
+        ]}})
+
+    monkeypatch.setattr(gemini.time, "sleep", lambda _: pytest.fail("long quota delay should not be retried"))
+    with pytest.raises(APIError):
+        gemini.call_with_transient_error_retry(request)
+
+
 def test_chat_reuses_successful_response_for_repeated_request(monkeypatch):
     db = sqlite3.connect(":memory:")
     db.execute("CREATE TABLE chats(repo_id TEXT, role TEXT, text TEXT, ts DEFAULT CURRENT_TIMESTAMP)")

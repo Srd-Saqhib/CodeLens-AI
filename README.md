@@ -22,7 +22,7 @@ Run tests: `cd backend && pip install pytest && PYTHONPATH=. pytest tests`
 ## API (see backend/app/main.py)
 GET /api/status, GET/POST /api/repos, GET /api/repos/{id}/analysis, GET .../summary?mode=beginner|developer, GET .../architecture, POST .../flow, POST .../index, POST/GET .../chat (engine: rag|agent)
 
-Without a Gemini key: scanning, architecture, flow, analytics and keyword-search chat work; summaries and RAG return a clear error.
+Without a Gemini key or after Gemini quota is exhausted: scanning, architecture, flow, analytics and keyword-search chat work; AI summaries report that Gemini quota is unavailable.
 
 ## How it works
 1. `scanner.download` fetches the repo zip, extracts only allowed text files (path-traversal, size, count, sensitive-file guards). Nothing is executed.

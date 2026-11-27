@@ -1,4 +1,4 @@
-import json, logging, os, sqlite3, uuid
+import json, logging, os, shutil, sqlite3, uuid
 from functools import lru_cache
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from . import scanner, agent, rag, flow, summary
+from .gemini import is_rate_limited
 
 logger = logging.getLogger(__name__)
 
@@ -65,8 +66,13 @@ def _cached_chat_response(rid, question, mode, engine, model, ai_enabled):
             out = {"answer": rag.answer(question, hits, mode), "steps": [],
                    "sources": [{"file": h["file"], "line": f"{h['start']}-{h['end']}", "text": f"score {h['score']}"} for h in hits]}
         except Exception as e:
+            if is_rate_limited(e):
+                logger.warning("Gemini quota exhausted during RAG chat for repository %s", rid)
+                raise _UncacheableChat(agent.keyword_search_response(
+                    a, root, question, "Gemini quota exhausted; using local keyword search."))
+            logger.exception("RAG chat failed for repository %s", rid)
             raise HTTPException(502, f"RAG failed: {e}")
-    if out["answer"].startswith("AI request failed ("):
+    if out["answer"].startswith(("AI request failed (", "Gemini quota exhausted;")):
         raise _UncacheableChat(out)
     return out
 
@@ -80,6 +86,28 @@ def status():
 def list_repos():
     rows = db.execute("SELECT id, url FROM repos ORDER BY rowid DESC LIMIT 10").fetchall()
     return [{"id": i, "name": u.split("github.com/")[-1].removesuffix(".git").strip("/")} for i, u in rows]
+
+
+@app.delete("/api/repos/{rid}")
+def delete_repo(rid: str):
+    row = db.execute("SELECT root FROM repos WHERE id=?", (rid,)).fetchone()
+    if not row:
+        raise HTTPException(404, "Unknown repository id")
+
+    data_root = os.path.realpath(DATA)
+    repo_root = os.path.realpath(row[0])
+    if repo_root == data_root or os.path.commonpath((data_root, repo_root)) != data_root:
+        raise HTTPException(500, "Repository path is outside the data directory")
+    if os.path.isdir(repo_root):
+        shutil.rmtree(repo_root)
+
+    db.execute("DELETE FROM summaries WHERE repo_id=?", (rid,))
+    db.execute("DELETE FROM chats WHERE repo_id=?", (rid,))
+    db.execute("DELETE FROM chunks WHERE repo_id=?", (rid,))
+    db.execute("DELETE FROM repos WHERE id=?", (rid,))
+    db.commit()
+    _cached_chat_response.cache_clear()
+    return {"removed": rid}
 
 
 @app.post("/api/repos")
@@ -105,6 +133,47 @@ def analysis(rid: str):
             "routes": agent.Tools(a, root).find_api_routes()}
 
 
+@app.get("/api/repos/{rid}/files")
+def repo_files(rid: str):
+    _, a, _ = load(rid)
+    return [
+        {
+            "path": path,
+            "lang": info["lang"],
+            "lines": info["lines"],
+            "functions": len(info.get("functions", [])),
+            "classes": len(info.get("classes", [])),
+            "routes": len(info.get("routes", [])),
+            "imports": len(info.get("imports", [])),
+        }
+        for path, info in sorted(a["files"].items())
+    ]
+
+
+@app.get("/api/repos/{rid}/file-content")
+def file_content(rid: str, path: str):
+    root, a, _ = load(rid)
+    info = a["files"].get(path)
+    if not info:
+        raise HTTPException(404, "Unknown file path")
+
+    root_real = os.path.realpath(root)
+    target = os.path.realpath(os.path.join(root_real, path))
+    if os.path.commonpath((root_real, target)) != root_real:
+        raise HTTPException(404, "Unknown file path")
+    try:
+        with open(target, encoding="utf-8", errors="replace") as source:
+            content = source.read()
+    except FileNotFoundError:
+        raise HTTPException(404, "Repository file is no longer available")
+
+    return {
+        "path": path,
+        "content": content,
+        "info": info,
+    }
+
+
 @app.get("/api/repos/{rid}/summary")
 def get_summary(rid: str, mode: str = "beginner"):
     if mode not in ("beginner", "developer"):
@@ -119,6 +188,8 @@ def get_summary(rid: str, mode: str = "beginner"):
         text = summary.generate(a, root, mode)
     except Exception as e:
         logger.exception("Gemini summary generation failed")
+        if is_rate_limited(e):
+            raise HTTPException(429, "Gemini quota exhausted. AI summaries will be available after quota resets or billing is enabled.")
         raise HTTPException(502, f"Gemini request failed: {e}")
     db.execute("INSERT OR REPLACE INTO summaries VALUES(?,?,?)", (rid, mode, text))
     db.commit()
